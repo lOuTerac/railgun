@@ -62,16 +62,17 @@ describe Railgun do
       describe 'nextstep' do
         let(:target) { Target.new Vector[1e5, 0.0, 0.0]}
         it 'run without error' do
-          projectile.nextstep(1.0)
+          projectile.nextstep!(1.0)
         end
       end
     end
   end
 
   describe 'target' do
-    let(:target) { Target.new Vector[1e5, 0.0, 0.0]}
+    let(:target) { Target.new Vector[1e5, 0.0, 0.0], rand_vector }
     describe 'initialize' do
       it 'fire' do
+        target.t = 2.0
         error = target.acceleration.r - Target::MAX_ACCELERATION
         expect(error.round 12).to eq 0.0
       end
@@ -80,7 +81,7 @@ describe Railgun do
     describe 'nextstep' do
       let(:target) { Target.new Vector[1e5, 0.0, 0.0]}
       it 'run without error' do
-        target.nextstep(0.01)
+        target.nextstep!(0.01)
       end
     end
   end

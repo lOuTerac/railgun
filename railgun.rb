@@ -1,10 +1,11 @@
 require 'matrix'
+require 'spliner'
 require 'pry'
 
-G           = 9.806           # 重力加速度
-MAX_ERROR   = 1.0             # 着弹误差1米
-TARGET_SIZE = 20.0            # 目标半径
-SONIC       = 340.3           # 马赫公制速度转换
+G           = 9.806       # 重力加速度
+MAX_ERROR   = 1.0         # 着弹误差1米
+TARGET_SIZE = 20.0        # 目标半径
+SONIC       = 340.3       # 马赫公制速度转换
 RAILGUN_V   = 1e4 * SONIC # 电磁炮最大初速
 
 def zero
@@ -16,11 +17,11 @@ def rand_vector
 end
 
 class Particle
-  attr_accessor :r, :v, :history
+  attr_accessor :r, :v, :t, :history
 
   def initialize(*_args)
     @t       = 0.0
-    @history = []
+    #@history = []
   end
 
   def acceleration
@@ -46,13 +47,13 @@ class Particle
   def nextstep!(delta_t)
     # 保存并返回下一步状态
     @r, @v, @t = nextstep(delta_t)
-    @history << [@r, @v, @t]
+    #@history << [@r, @v, @t]
     return @r, @v, @t
   end
 end
 
 class Target < Particle
-  MAX_ACCELERATION = 7.0 * G
+  MAX_ACCELERATION = 10.0 * G
 
   def collision_radius
     # 碰撞半径
@@ -92,6 +93,14 @@ class Projectile < Particle
   end
 
   private
+
+  def nextstep(delta_t)
+    # 覆盖原方法
+    # 匀速运动不需要使用Runge-Kutta法
+    r = @r + @v * delta_t
+    t = @t + delta_t
+    return r, @v, t
+  end
 
   def hit?
     (@target.r - @r).magnitude < @target.collision_radius
@@ -149,12 +158,9 @@ class Projectile < Particle
 end
 
 class Railgun
-  MAX_RANGE = 5e4
-  MIN_RANGE = 1e3
-  STEP      = 1e2
 
-  def initialize(gun_speed, target_speed)
-    @gun_speed, @target_speed = gun_speed, target_speed
+  def initialize(gun_speed, target_speed, silence: false)
+    @gun_speed, @target_speed, @silence = gun_speed, target_speed, silence
   end
 
   def test_fire(target_distance)
@@ -166,15 +172,15 @@ class Railgun
   end
 
   def range
-    min = (MIN_RANGE / STEP).round
-    max = (MAX_RANGE / STEP).round
-    (min..max).to_a.reverse!.map! { |i| i * STEP }.bsearch do |r|
+    min = (estimate_min / estimate_step).round
+    max = (estimate_max / estimate_step).round
+    (min..max).to_a.reverse!.map! { |i| i * estimate_step }.bsearch do |r|
       check_range(r)
     end
   end
 
   def check_range(r)
-    puts "\n射程：#{r} 米，测试中..."
+    output "\n射程：#{r} 米，测试中..."
     result = []
     fire_count = 8 # 试射次数
     hit_cont   = 7 # 通过标准
@@ -183,8 +189,39 @@ class Railgun
     end
     sleep 0.1 while result.length < fire_count
     hit = result.reject { |i| i == :miss }.length
-    puts "#{fire_count} 发，#{hit} 中"
-    puts result.map { |i| i  == :miss ? 'o' : 'x' }.join
+    output "#{fire_count} 发，#{hit} 中"
+    output result.map { |i| i  == :miss ? 'o' : 'x' }.join
     result.reject { |i| i == :miss }.length >= hit_cont
+  end
+
+  private
+
+  def estimate_range
+    x, y = read_data
+    spliner = Spliner::Spliner.new(x, y)
+    spliner[@gun_speed / SONIC]
+  end
+
+  def read_data
+    data = File.readlines('result.txt').map do |l|
+      l.split(',').map(&:to_f)
+    end
+    Matrix[*data].transpose.to_a
+  end
+
+  def estimate_min
+    estimate_range / 1.5
+  end
+
+  def estimate_max
+    estimate_range * 2
+  end
+
+  def estimate_step
+    ((estimate_max - estimate_min) / 256).round
+  end
+
+  def output(*args)
+    puts(*args) unless @silence
   end
 end
